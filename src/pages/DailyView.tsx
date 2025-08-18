@@ -48,14 +48,6 @@ const DailyView = () => {
       completed: false
     },
     {
-      time: "4:00 PM",
-      title: "Desk Yoga",
-      type: "rest",
-      duration: "10 min",
-      description: "Release tension, realign posture",
-      completed: false
-    },
-    {
       time: "6:00 PM",
       title: "Wind Down Meditation",
       type: "calm",
@@ -164,7 +156,7 @@ const DailyView = () => {
               <p className="text-xs text-muted-foreground">Completed</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-accent">4</p>
+              <p className="text-2xl font-bold text-accent">3</p>
               <p className="text-xs text-muted-foreground">Remaining</p>
             </div>
             <div className="text-center">
