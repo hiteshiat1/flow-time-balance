@@ -33,11 +33,6 @@ const Landing = () => {
       icon: <BookOpen className="h-12 w-12 text-primary" />,
       title: "Wellness Library",
       description: "Access curated content, exercises, and resources to support your wellness journey."
-    },
-    {
-      icon: <BarChart3 className="h-12 w-12 text-primary" />,
-      title: "Smart Insights",
-      description: "Get personalized insights and recommendations based on your wellness patterns."
     }
   ];
 
