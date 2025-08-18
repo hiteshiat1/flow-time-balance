@@ -149,7 +149,7 @@ const DailyView = () => {
         </div>
 
         {/* Quick Stats */}
-        <Card className="p-4 mb-6 bg-gradient-to-r from-card to-primary-soft/30">
+        <Card className="p-4 mb-20 bg-gradient-to-r from-card to-primary-soft/30">
           <div className="flex justify-between items-center">
             <div className="text-center">
               <p className="text-2xl font-bold text-primary">2</p>
