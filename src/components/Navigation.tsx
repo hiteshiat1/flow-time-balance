@@ -12,8 +12,8 @@ export const Navigation = () => {
     {
       icon: Calendar,
       label: "Today",
-      href: "/",
-      active: location.pathname === "/"
+      href: "/dashboard",
+      active: location.pathname === "/dashboard"
     },
     {
       icon: BookOpen,
