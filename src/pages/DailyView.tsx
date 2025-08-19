@@ -1,10 +1,13 @@
-import { Calendar, Clock, Plus, Sparkles } from "lucide-react";
+import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/Navigation";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 const DailyView = () => {
+  const { toast } = useToast();
   const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const currentDate = new Date().toLocaleDateString([], { 
     weekday: 'long', 
@@ -13,24 +16,29 @@ const DailyView = () => {
     day: 'numeric' 
   });
 
-  const todaySchedule = [
+  const [schedule, setSchedule] = useState([
     {
+      id: 1,
       time: "9:00 AM",
       title: "Morning Focus Session",
       type: "focus",
       duration: "25 min",
       description: "Deep work block with breathing exercise",
-      completed: true
+      completed: true,
+      current: false
     },
     {
+      id: 2,
       time: "10:30 AM",
       title: "Hydration Reminder",
       type: "energy",
       duration: "2 min",
       description: "Drink water + quick stretch",
-      completed: true
+      completed: true,
+      current: false
     },
     {
+      id: 3,
       time: "12:00 PM",
       title: "Mindful Lunch Break",
       type: "calm",
@@ -40,22 +48,92 @@ const DailyView = () => {
       current: true
     },
     {
+      id: 4,
       time: "2:30 PM",
       title: "Power Walk",
       type: "energy",
       duration: "15 min",
       description: "Get outside, boost energy",
-      completed: false
+      completed: false,
+      current: false
     },
     {
+      id: 5,
       time: "6:00 PM",
       title: "Wind Down Meditation",
       type: "calm",
       duration: "12 min",
       description: "Transition from work to evening",
-      completed: false
+      completed: false,
+      current: false
     }
-  ];
+  ]);
+
+  const handleStartActivity = (activityId: number) => {
+    const activity = schedule.find(item => item.id === activityId);
+    if (!activity) return;
+
+    // Show activity started toast
+    toast({
+      title: `${activity.title} Started!`,
+      description: `Focus on your ${activity.type} activity for ${activity.duration}`,
+    });
+
+    // Simulate activity completion after a delay (in real app, this would be a timer)
+    setTimeout(() => {
+      setSchedule(prev => {
+        const updated = prev.map(item => {
+          if (item.id === activityId) {
+            return { ...item, completed: true, current: false };
+          }
+          return item;
+        });
+
+        // Set next activity as current
+        const currentIndex = updated.findIndex(item => item.id === activityId);
+        const nextActivity = updated[currentIndex + 1];
+        if (nextActivity && !nextActivity.completed) {
+          updated[currentIndex + 1] = { ...nextActivity, current: true };
+        }
+
+        return updated;
+      });
+
+      toast({
+        title: "Activity Completed! 🎉",
+        description: `Great job on completing ${activity.title}`,
+      });
+    }, 2000); // 2 seconds for demo purposes
+  };
+
+  const handleCompleteActivity = (activityId: number) => {
+    setSchedule(prev => {
+      const updated = prev.map(item => {
+        if (item.id === activityId) {
+          return { ...item, completed: true, current: false };
+        }
+        return item;
+      });
+
+      // Set next activity as current
+      const currentIndex = updated.findIndex(item => item.id === activityId);
+      const nextActivity = updated[currentIndex + 1];
+      if (nextActivity && !nextActivity.completed) {
+        updated[currentIndex + 1] = { ...nextActivity, current: true };
+      }
+
+      return updated;
+    });
+
+    const activity = schedule.find(item => item.id === activityId);
+    toast({
+      title: "Activity Completed! 🎉",
+      description: `Great job on completing ${activity?.title}`,
+    });
+  };
+
+  const completedCount = schedule.filter(item => item.completed).length;
+  const remainingCount = schedule.filter(item => !item.completed).length;
 
   const getActivityTypeClass = (type: string) => {
     switch (type) {
@@ -91,7 +169,7 @@ const DailyView = () => {
           </div>
 
           <div className="space-y-3">
-            {todaySchedule.map((item, index) => (
+            {schedule.map((item, index) => (
               <Card 
                 key={index} 
                 className={`p-4 transition-all duration-300 ${
@@ -133,14 +211,33 @@ const DailyView = () => {
                     </div>
                   </div>
                   
-                  {!item.completed && (
-                    <Button 
-                      size="sm" 
-                      variant={item.current ? "default" : "outline"}
-                      className={item.current ? "bg-primary hover:bg-primary/90" : ""}
-                    >
-                      {item.current ? "Start" : "Begin"}
-                    </Button>
+                  {item.completed ? (
+                    <div className="flex items-center gap-1 text-primary">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-xs font-medium">Done</span>
+                    </div>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button 
+                        size="sm" 
+                        variant={item.current ? "default" : "outline"}
+                        className={item.current ? "bg-primary hover:bg-primary/90" : ""}
+                        onClick={() => handleStartActivity(item.id)}
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        {item.current ? "Start" : "Begin"}
+                      </Button>
+                      {!item.current && (
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleCompleteActivity(item.id)}
+                          className="text-xs px-2"
+                        >
+                          Skip
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </Card>
@@ -152,11 +249,11 @@ const DailyView = () => {
         <Card className="p-4 mb-20 bg-gradient-to-r from-card to-primary-soft/30">
           <div className="flex justify-between items-center">
             <div className="text-center">
-              <p className="text-2xl font-bold text-primary">2</p>
+              <p className="text-2xl font-bold text-primary">{completedCount}</p>
               <p className="text-xs text-muted-foreground">Completed</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-accent">3</p>
+              <p className="text-2xl font-bold text-accent">{remainingCount}</p>
               <p className="text-xs text-muted-foreground">Remaining</p>
             </div>
             <div className="text-center">
