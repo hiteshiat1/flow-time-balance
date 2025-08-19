@@ -1,9 +1,9 @@
-import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play } from "lucide-react";
+import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/Navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 const DailyView = () => {
@@ -23,9 +23,11 @@ const DailyView = () => {
       title: "Morning Focus Session",
       type: "focus",
       duration: "25 min",
+      durationInSeconds: 25 * 60,
       description: "Deep work block with breathing exercise",
       completed: true,
-      current: false
+      current: false,
+      inProgress: false
     },
     {
       id: 2,
@@ -33,9 +35,11 @@ const DailyView = () => {
       title: "Hydration Reminder",
       type: "energy",
       duration: "2 min",
+      durationInSeconds: 2 * 60,
       description: "Drink water + quick stretch",
       completed: true,
-      current: false
+      current: false,
+      inProgress: false
     },
     {
       id: 3,
@@ -43,9 +47,11 @@ const DailyView = () => {
       title: "Mindful Lunch Break",
       type: "calm",
       duration: "30 min",
+      durationInSeconds: 30 * 60,
       description: "Eat slowly, practice gratitude",
       completed: false,
-      current: true
+      current: true,
+      inProgress: false
     },
     {
       id: 4,
@@ -53,9 +59,11 @@ const DailyView = () => {
       title: "Power Walk",
       type: "energy",
       duration: "15 min",
+      durationInSeconds: 15 * 60,
       description: "Get outside, boost energy",
       completed: false,
-      current: false
+      current: false,
+      inProgress: false
     },
     {
       id: 5,
@@ -63,47 +71,84 @@ const DailyView = () => {
       title: "Wind Down Meditation",
       type: "calm",
       duration: "12 min",
+      durationInSeconds: 12 * 60,
       description: "Transition from work to evening",
       completed: false,
-      current: false
+      current: false,
+      inProgress: false
     }
   ]);
+
+  const [activeTimer, setActiveTimer] = useState<{
+    activityId: number;
+    remainingSeconds: number;
+  } | null>(null);
+
+  // Timer effect
+  useEffect(() => {
+    if (!activeTimer || activeTimer.remainingSeconds <= 0) return;
+
+    const interval = setInterval(() => {
+      setActiveTimer(prev => {
+        if (!prev || prev.remainingSeconds <= 1) {
+          // Activity completed
+          handleActivityCompletion(prev?.activityId || 0);
+          return null;
+        }
+        return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeTimer]);
+
+  const handleActivityCompletion = (activityId: number) => {
+    setSchedule(prev => {
+      const updated = prev.map(item => {
+        if (item.id === activityId) {
+          return { ...item, completed: true, current: false, inProgress: false };
+        }
+        return item;
+      });
+
+      // Set next activity as current
+      const currentIndex = updated.findIndex(item => item.id === activityId);
+      const nextActivity = updated[currentIndex + 1];
+      if (nextActivity && !nextActivity.completed) {
+        updated[currentIndex + 1] = { ...nextActivity, current: true };
+      }
+
+      return updated;
+    });
+
+    const activity = schedule.find(item => item.id === activityId);
+    toast({
+      title: "Activity Completed! 🎉",
+      description: `Great job on completing ${activity?.title}`,
+    });
+  };
 
   const handleStartActivity = (activityId: number) => {
     const activity = schedule.find(item => item.id === activityId);
     if (!activity) return;
 
-    // Show activity started toast
+    // Set activity as in progress
+    setSchedule(prev => prev.map(item => 
+      item.id === activityId 
+        ? { ...item, inProgress: true }
+        : item
+    ));
+
+    // Start timer
+    setActiveTimer({
+      activityId,
+      remainingSeconds: activity.durationInSeconds
+    });
+
     toast({
       title: `${activity.title} Started!`,
       description: `Focus on your ${activity.type} activity for ${activity.duration}`,
     });
-
-    // Simulate activity completion after a delay (in real app, this would be a timer)
-    setTimeout(() => {
-      setSchedule(prev => {
-        const updated = prev.map(item => {
-          if (item.id === activityId) {
-            return { ...item, completed: true, current: false };
-          }
-          return item;
-        });
-
-        // Set next activity as current
-        const currentIndex = updated.findIndex(item => item.id === activityId);
-        const nextActivity = updated[currentIndex + 1];
-        if (nextActivity && !nextActivity.completed) {
-          updated[currentIndex + 1] = { ...nextActivity, current: true };
-        }
-
-        return updated;
-      });
-
-      toast({
-        title: "Activity Completed! 🎉",
-        description: `Great job on completing ${activity.title}`,
-      });
-    }, 2000); // 2 seconds for demo purposes
   };
 
   const handleCompleteActivity = (activityId: number) => {
@@ -211,34 +256,49 @@ const DailyView = () => {
                     </div>
                   </div>
                   
-                  {item.completed ? (
-                    <div className="flex items-center gap-1 text-primary">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-xs font-medium">Done</span>
-                    </div>
-                  ) : (
-                    <div className="flex gap-1">
-                      <Button 
-                        size="sm" 
-                        variant={item.current ? "default" : "outline"}
-                        className={item.current ? "bg-primary hover:bg-primary/90" : ""}
-                        onClick={() => handleStartActivity(item.id)}
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        {item.current ? "Start" : "Begin"}
-                      </Button>
-                      {!item.current && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          onClick={() => handleCompleteActivity(item.id)}
-                          className="text-xs px-2"
-                        >
-                          Skip
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                   {item.completed ? (
+                     <div className="flex items-center gap-1 text-primary">
+                       <CheckCircle className="w-4 h-4" />
+                       <span className="text-xs font-medium">Done</span>
+                     </div>
+                   ) : item.inProgress ? (
+                     <div className="flex flex-col items-center gap-1">
+                       <div className="flex items-center gap-1 text-primary">
+                         <Pause className="w-4 h-4" />
+                         <span className="text-xs font-medium">In Progress</span>
+                       </div>
+                       {activeTimer && activeTimer.activityId === item.id && (
+                         <div className="text-center">
+                           <div className="text-lg font-mono font-bold text-primary">
+                             {Math.floor(activeTimer.remainingSeconds / 60)}:{(activeTimer.remainingSeconds % 60).toString().padStart(2, '0')}
+                           </div>
+                           <span className="text-xs text-muted-foreground">remaining</span>
+                         </div>
+                       )}
+                     </div>
+                   ) : (
+                     <div className="flex gap-1">
+                       <Button 
+                         size="sm" 
+                         variant={item.current ? "default" : "outline"}
+                         className={item.current ? "bg-primary hover:bg-primary/90" : ""}
+                         onClick={() => handleStartActivity(item.id)}
+                       >
+                         <Play className="w-3 h-3 mr-1" />
+                         {item.current ? "Start" : "Begin"}
+                       </Button>
+                       {!item.current && (
+                         <Button 
+                           size="sm" 
+                           variant="ghost"
+                           onClick={() => handleCompleteActivity(item.id)}
+                           className="text-xs px-2"
+                         >
+                           Skip
+                         </Button>
+                       )}
+                     </div>
+                   )}
                 </div>
               </Card>
             ))}
