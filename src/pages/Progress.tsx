@@ -163,7 +163,7 @@ const Progress = () => {
         </div>
 
         {/* Stats Summary */}
-        <Card className="p-4 mb-6">
+        <Card className="p-4 mb-20">
           <h3 className="font-medium text-foreground mb-3">Monthly Summary</h3>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
