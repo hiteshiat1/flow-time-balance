@@ -2,11 +2,29 @@ import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play, Pause, MapPin } fro
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Navigation } from "@/components/Navigation";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { format, parse, isAfter, isBefore, addMinutes } from "date-fns";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
+const addActivitySchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  type: z.enum(["focus", "energy", "calm", "rest"]),
+  time: z.string().min(1, "Time is required"),
+  duration: z.number().min(1, "Duration must be at least 1 minute"),
+  description: z.string().optional(),
+});
+
+type AddActivityForm = z.infer<typeof addActivitySchema>;
 
 const DailyView = () => {
   const { toast } = useToast();
@@ -107,6 +125,56 @@ const DailyView = () => {
     activityId: number;
     remainingSeconds: number;
   } | null>(null);
+
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+
+  const form = useForm<AddActivityForm>({
+    resolver: zodResolver(addActivitySchema),
+    defaultValues: {
+      title: "",
+      type: "calm",
+      time: "",
+      duration: 15,
+      description: "",
+    },
+  });
+
+  const handleAddActivity = (data: AddActivityForm) => {
+    const newActivity = {
+      id: Math.max(...schedule.map(s => s.id)) + 1,
+      time: data.time,
+      title: data.title,
+      type: data.type,
+      duration: `${data.duration} min`,
+      durationInSeconds: data.duration * 60,
+      description: data.description || "",
+      completed: false,
+      current: false,
+      inProgress: false
+    };
+
+    setSchedule(prev => {
+      const updated = [...prev, newActivity];
+      // Sort by time
+      return updated.sort((a, b) => {
+        try {
+          const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+          const timeA = parse(`${today} ${a.time}`, 'yyyy-MM-dd h:mm a', new Date());
+          const timeB = parse(`${today} ${b.time}`, 'yyyy-MM-dd h:mm a', new Date());
+          return timeA.getTime() - timeB.getTime();
+        } catch {
+          return 0;
+        }
+      });
+    });
+
+    form.reset();
+    setIsAddDialogOpen(false);
+    toast({
+      title: "Activity Added!",
+      description: `${data.title} scheduled for ${data.time}`,
+    });
+  };
 
   // Timer effect
   useEffect(() => {
@@ -274,10 +342,125 @@ const DailyView = () => {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-foreground">Today's Plan</h2>
-            <Button variant="ghost" size="sm" className="text-primary">
-              <Plus className="w-4 h-4 mr-1" />
-              Add
-            </Button>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-primary">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Add New Activity</DialogTitle>
+                </DialogHeader>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(handleAddActivity)} className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Activity Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. Morning Meditation" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="type"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Activity Type</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select activity type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="focus">Focus</SelectItem>
+                              <SelectItem value="energy">Energy</SelectItem>
+                              <SelectItem value="calm">Calm</SelectItem>
+                              <SelectItem value="rest">Rest</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="time"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Scheduled Time</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. 9:30 AM" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="duration"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Duration (minutes)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="15" 
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description (optional)</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Brief description of the activity..." 
+                              className="resize-none"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="flex gap-2 pt-4">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => setIsAddDialogOpen(false)}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="flex-1">
+                        Add Activity
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="space-y-3">
