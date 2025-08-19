@@ -144,7 +144,7 @@ const WellnessLibrary = () => {
         </div>
 
         {/* All Activities */}
-        <div className="mb-6">
+        <div className="mb-24">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-medium text-foreground">All Activities</h2>
             <Button variant="ghost" size="sm">
