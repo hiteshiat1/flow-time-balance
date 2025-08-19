@@ -288,6 +288,23 @@ const DailyView = () => {
     }
   };
 
+  // Check if activity is about to start (within 10 minutes)
+  const isAboutToStart = (activityTime: string) => {
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      const activityDateTime = parse(`${today} ${activityTime}`, 'yyyy-MM-dd h:mm a', new Date());
+      const activityZonedTime = toZonedTime(activityDateTime, userTimezone);
+      const currentZonedTime = toZonedTime(currentDateTime, userTimezone);
+      
+      const timeDiff = activityZonedTime.getTime() - currentZonedTime.getTime();
+      const minutesUntil = Math.ceil(timeDiff / (1000 * 60));
+      
+      return minutesUntil <= 10 && minutesUntil > 0;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const getTimeStatus = (activityTime: string) => {
     try {
       const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
@@ -469,10 +486,12 @@ const DailyView = () => {
                 key={index} 
                 className={`p-4 transition-all duration-300 ${
                   item.current 
-                    ? 'ring-2 ring-primary bg-gradient-to-r from-primary-soft to-accent-soft shadow-lg breathing-animation' 
+                    ? 'ring-2 ring-primary bg-gradient-to-r from-primary-soft to-accent-soft shadow-lg' 
                     : item.completed 
                       ? 'bg-muted/50 opacity-75' 
-                      : 'bg-card hover:shadow-md'
+                      : isAboutToStart(item.time) && !item.completed
+                        ? 'ring-2 ring-accent bg-gradient-to-r from-accent-soft to-primary-soft shadow-md'
+                        : 'bg-card hover:shadow-md'
                 }`}
               >
                 <div className="flex items-start gap-3">
