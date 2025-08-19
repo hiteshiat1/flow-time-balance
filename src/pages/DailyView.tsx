@@ -1,20 +1,44 @@
-import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play, Pause } from "lucide-react";
+import { Calendar, Clock, Plus, Sparkles, CheckCircle, Play, Pause, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/Navigation";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import { format, parse, isAfter, isBefore, addMinutes } from "date-fns";
 
 const DailyView = () => {
   const { toast } = useToast();
-  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const currentDate = new Date().toLocaleDateString([], { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  const [userTimezone, setUserTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get user's timezone from location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          // Keep detected timezone
+          setUserTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        },
+        () => {
+          // Fallback to browser timezone
+          setUserTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        }
+      );
+    }
+  }, []);
+
+  const currentTime = formatInTimeZone(currentDateTime, userTimezone, 'h:mm a');
+  const currentDate = formatInTimeZone(currentDateTime, userTimezone, 'EEEE, MMMM d, yyyy');
 
   const [schedule, setSchedule] = useState([
     {
@@ -177,6 +201,49 @@ const DailyView = () => {
     });
   };
 
+  // Check if activity can be started based on current time
+  const canStartActivity = (activityTime: string) => {
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      const activityDateTime = parse(`${today} ${activityTime}`, 'yyyy-MM-dd h:mm a', new Date());
+      const activityZonedTime = toZonedTime(activityDateTime, userTimezone);
+      const currentZonedTime = toZonedTime(currentDateTime, userTimezone);
+      
+      // Allow starting 5 minutes before scheduled time
+      const startWindow = addMinutes(activityZonedTime, -5);
+      
+      return isAfter(currentZonedTime, startWindow) || 
+             format(currentZonedTime, 'h:mm a') === activityTime;
+    } catch (error) {
+      console.error('Error parsing activity time:', error);
+      return false;
+    }
+  };
+
+  const getTimeStatus = (activityTime: string) => {
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      const activityDateTime = parse(`${today} ${activityTime}`, 'yyyy-MM-dd h:mm a', new Date());
+      const activityZonedTime = toZonedTime(activityDateTime, userTimezone);
+      const currentZonedTime = toZonedTime(currentDateTime, userTimezone);
+      
+      if (isBefore(currentZonedTime, activityZonedTime)) {
+        const timeDiff = activityZonedTime.getTime() - currentZonedTime.getTime();
+        const minutesUntil = Math.ceil(timeDiff / (1000 * 60));
+        
+        if (minutesUntil > 60) {
+          const hours = Math.floor(minutesUntil / 60);
+          const mins = minutesUntil % 60;
+          return `Starts in ${hours}h ${mins}m`;
+        }
+        return `Starts in ${minutesUntil}m`;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  };
+
   const completedCount = schedule.filter(item => item.completed).length;
   const remainingCount = schedule.filter(item => !item.completed).length;
 
@@ -277,28 +344,45 @@ const DailyView = () => {
                        )}
                      </div>
                    ) : (
-                     <div className="flex gap-1">
-                       <Button 
-                         size="sm" 
-                         variant={item.current ? "default" : "outline"}
-                         className={item.current ? "bg-primary hover:bg-primary/90" : ""}
-                         onClick={() => handleStartActivity(item.id)}
-                       >
-                         <Play className="w-3 h-3 mr-1" />
-                         {item.current ? "Start" : "Begin"}
-                       </Button>
-                       {!item.current && (
-                         <Button 
-                           size="sm" 
-                           variant="ghost"
-                           onClick={() => handleCompleteActivity(item.id)}
-                           className="text-xs px-2"
-                         >
-                           Skip
-                         </Button>
-                       )}
-                     </div>
-                   )}
+                      <div className="flex flex-col items-end gap-1">
+                        {!canStartActivity(item.time) && !item.completed ? (
+                          <div className="text-center">
+                            <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                              <Clock className="w-3 h-3" />
+                              <span className="text-xs">Not time yet</span>
+                            </div>
+                            {getTimeStatus(item.time) && (
+                              <span className="text-xs text-accent font-medium">
+                                {getTimeStatus(item.time)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <Button 
+                              size="sm" 
+                              variant={item.current ? "default" : "outline"}
+                              className={item.current ? "bg-primary hover:bg-primary/90" : ""}
+                              onClick={() => handleStartActivity(item.id)}
+                              disabled={!canStartActivity(item.time)}
+                            >
+                              <Play className="w-3 h-3 mr-1" />
+                              {item.current ? "Start" : "Begin"}
+                            </Button>
+                            {!item.current && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleCompleteActivity(item.id)}
+                                className="text-xs px-2"
+                              >
+                                Skip
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </div>
               </Card>
             ))}
