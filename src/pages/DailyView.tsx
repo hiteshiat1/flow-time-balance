@@ -15,6 +15,8 @@ import { format, parse, isAfter, isBefore, addMinutes } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const addActivitySchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -26,10 +28,25 @@ const addActivitySchema = z.object({
 
 type AddActivityForm = z.infer<typeof addActivitySchema>;
 
+interface Activity {
+  id: string;
+  time: string;
+  title: string;
+  type: string;
+  duration: string;
+  durationInSeconds: number;
+  description: string;
+  completed: boolean;
+  current: boolean;
+  inProgress: boolean;
+}
+
 const DailyView = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [userTimezone, setUserTimezone] = useState<string>(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
 
   // Update current time every minute
   useEffect(() => {
@@ -58,73 +75,69 @@ const DailyView = () => {
   const currentTime = formatInTimeZone(currentDateTime, userTimezone, 'h:mm a');
   const currentDate = formatInTimeZone(currentDateTime, userTimezone, 'EEEE, MMMM d, yyyy');
 
-  const [schedule, setSchedule] = useState([
-    {
-      id: 1,
-      time: "9:00 AM",
-      title: "Morning Focus Session",
-      type: "focus",
-      duration: "25 min",
-      durationInSeconds: 25 * 60,
-      description: "Deep work block with breathing exercise",
-      completed: true,
-      current: false,
-      inProgress: false
-    },
-    {
-      id: 2,
-      time: "10:30 AM",
-      title: "Hydration Reminder",
-      type: "energy",
-      duration: "2 min",
-      durationInSeconds: 2 * 60,
-      description: "Drink water + quick stretch",
-      completed: true,
-      current: false,
-      inProgress: false
-    },
-    {
-      id: 3,
-      time: "12:00 PM",
-      title: "Mindful Lunch Break",
-      type: "calm",
-      duration: "30 min",
-      durationInSeconds: 30 * 60,
-      description: "Eat slowly, practice gratitude",
-      completed: false,
-      current: true,
-      inProgress: false
-    },
-    {
-      id: 4,
-      time: "2:30 PM",
-      title: "Power Walk",
-      type: "energy",
-      duration: "15 min",
-      durationInSeconds: 15 * 60,
-      description: "Get outside, boost energy",
-      completed: false,
-      current: false,
-      inProgress: false
-    },
-    {
-      id: 5,
-      time: "6:00 PM",
-      title: "Wind Down Meditation",
-      type: "calm",
-      duration: "12 min",
-      durationInSeconds: 12 * 60,
-      description: "Transition from work to evening",
-      completed: false,
-      current: false,
-      inProgress: false
-    }
-  ]);
+  const [schedule, setSchedule] = useState<Activity[]>([]);
 
   const [activeTimer, setActiveTimer] = useState<{
-    activityId: number;
+    activityId: string;
     remainingSeconds: number;
   } | null>(null);
+
+  // Load user's activities from database
+  const fetchActivities = async () => {
+    if (!user) return;
+    
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      
+      const { data, error } = await supabase
+        .from('user_activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('scheduled_date', today)
+        .order('scheduled_time');
+
+      if (error) throw error;
+
+      const activities: Activity[] = (data || []).map((activity, index) => ({
+        id: activity.id,
+        time: activity.scheduled_time,
+        title: activity.title,
+        type: activity.type,
+        duration: `${activity.duration_minutes} min`,
+        durationInSeconds: activity.duration_minutes * 60,
+        description: activity.description || '',
+        completed: activity.completed,
+        current: false,
+        inProgress: false
+      }));
+
+      // Set the first non-completed activity as current
+      if (activities.length > 0) {
+        const firstIncomplete = activities.findIndex(a => !a.completed);
+        if (firstIncomplete !== -1) {
+          activities[firstIncomplete].current = true;
+        }
+      }
+
+      setSchedule(activities);
+    } catch (error: any) {
+      console.error('Error fetching activities:', error);
+      toast({
+        title: "Error loading activities",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load activities when user or date changes
+  useEffect(() => {
+    if (user) {
+      fetchActivities();
+    }
+  }, [user, currentDateTime.toDateString()]);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
@@ -139,41 +152,71 @@ const DailyView = () => {
     },
   });
 
-  const handleAddActivity = (data: AddActivityForm) => {
-    const newActivity = {
-      id: Math.max(...schedule.map(s => s.id)) + 1,
-      time: data.time,
-      title: data.title,
-      type: data.type,
-      duration: `${data.duration} min`,
-      durationInSeconds: data.duration * 60,
-      description: data.description || "",
-      completed: false,
-      current: false,
-      inProgress: false
-    };
+  const handleAddActivity = async (data: AddActivityForm) => {
+    if (!user) return;
 
-    setSchedule(prev => {
-      const updated = [...prev, newActivity];
-      // Sort by time
-      return updated.sort((a, b) => {
-        try {
-          const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
-          const timeA = parse(`${today} ${a.time}`, 'yyyy-MM-dd h:mm a', new Date());
-          const timeB = parse(`${today} ${b.time}`, 'yyyy-MM-dd h:mm a', new Date());
-          return timeA.getTime() - timeB.getTime();
-        } catch {
-          return 0;
-        }
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      
+      const { data: newActivity, error } = await supabase
+        .from('user_activities')
+        .insert({
+          user_id: user.id,
+          title: data.title,
+          type: data.type,
+          scheduled_time: data.time,
+          duration_minutes: data.duration,
+          description: data.description || '',
+          scheduled_date: today
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      const activity: Activity = {
+        id: newActivity.id,
+        time: newActivity.scheduled_time,
+        title: newActivity.title,
+        type: newActivity.type,
+        duration: `${newActivity.duration_minutes} min`,
+        durationInSeconds: newActivity.duration_minutes * 60,
+        description: newActivity.description || '',
+        completed: false,
+        current: false,
+        inProgress: false
+      };
+
+      setSchedule(prev => {
+        const updated = [...prev, activity];
+        // Sort by time
+        return updated.sort((a, b) => {
+          try {
+            const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+            const timeA = parse(`${today} ${a.time}`, 'yyyy-MM-dd h:mm a', new Date());
+            const timeB = parse(`${today} ${b.time}`, 'yyyy-MM-dd h:mm a', new Date());
+            return timeA.getTime() - timeB.getTime();
+          } catch {
+            return 0;
+          }
+        });
       });
-    });
 
-    form.reset();
-    setIsAddDialogOpen(false);
-    toast({
-      title: "Activity Added!",
-      description: `${data.title} scheduled for ${data.time}`,
-    });
+      form.reset();
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Activity Added!",
+        description: `${data.title} scheduled for ${data.time}`,
+      });
+    } catch (error: any) {
+      console.error('Error adding activity:', error);
+      toast({
+        title: "Error adding activity",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
   // Timer effect
@@ -184,7 +227,9 @@ const DailyView = () => {
       setActiveTimer(prev => {
         if (!prev || prev.remainingSeconds <= 1) {
           // Activity completed
-          handleActivityCompletion(prev?.activityId || 0);
+          if (prev?.activityId) {
+            handleActivityCompletion(prev.activityId);
+          }
           return null;
         }
         return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
@@ -194,33 +239,57 @@ const DailyView = () => {
     return () => clearInterval(interval);
   }, [activeTimer]);
 
-  const handleActivityCompletion = (activityId: number) => {
-    setSchedule(prev => {
-      const updated = prev.map(item => {
-        if (item.id === activityId) {
-          return { ...item, completed: true, current: false, inProgress: false };
+  const handleActivityCompletion = async (activityId: string) => {
+    if (!user) return;
+
+    try {
+      // Update in database
+      const { error } = await supabase
+        .from('user_activities')
+        .update({ 
+          completed: true, 
+          completed_at: new Date().toISOString() 
+        })
+        .eq('id', activityId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setSchedule(prev => {
+        const updated = prev.map(item => {
+          if (item.id === activityId) {
+            return { ...item, completed: true, current: false, inProgress: false };
+          }
+          return item;
+        });
+
+        // Set next activity as current
+        const currentIndex = updated.findIndex(item => item.id === activityId);
+        const nextActivity = updated[currentIndex + 1];
+        if (nextActivity && !nextActivity.completed) {
+          updated[currentIndex + 1] = { ...nextActivity, current: true };
         }
-        return item;
+
+        return updated;
       });
 
-      // Set next activity as current
-      const currentIndex = updated.findIndex(item => item.id === activityId);
-      const nextActivity = updated[currentIndex + 1];
-      if (nextActivity && !nextActivity.completed) {
-        updated[currentIndex + 1] = { ...nextActivity, current: true };
-      }
-
-      return updated;
-    });
-
-    const activity = schedule.find(item => item.id === activityId);
-    toast({
-      title: "Activity Completed! 🎉",
-      description: `Great job on completing ${activity?.title}`,
-    });
+      const activity = schedule.find(item => item.id === activityId);
+      toast({
+        title: "Activity Completed! 🎉",
+        description: `Great job on completing ${activity?.title}`,
+      });
+    } catch (error: any) {
+      console.error('Error completing activity:', error);
+      toast({
+        title: "Error updating activity",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleStartActivity = (activityId: number) => {
+  const handleStartActivity = (activityId: string) => {
     const activity = schedule.find(item => item.id === activityId);
     if (!activity) return;
 
@@ -243,30 +312,8 @@ const DailyView = () => {
     });
   };
 
-  const handleCompleteActivity = (activityId: number) => {
-    setSchedule(prev => {
-      const updated = prev.map(item => {
-        if (item.id === activityId) {
-          return { ...item, completed: true, current: false };
-        }
-        return item;
-      });
-
-      // Set next activity as current
-      const currentIndex = updated.findIndex(item => item.id === activityId);
-      const nextActivity = updated[currentIndex + 1];
-      if (nextActivity && !nextActivity.completed) {
-        updated[currentIndex + 1] = { ...nextActivity, current: true };
-      }
-
-      return updated;
-    });
-
-    const activity = schedule.find(item => item.id === activityId);
-    toast({
-      title: "Activity Completed! 🎉",
-      description: `Great job on completing ${activity?.title}`,
-    });
+  const handleCompleteActivity = async (activityId: string) => {
+    await handleActivityCompletion(activityId);
   };
 
   // Check if activity can be started based on current time
@@ -341,6 +388,17 @@ const DailyView = () => {
       default: return 'activity-calm';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-soft via-background to-accent-soft flex items-center justify-center">
+        <div className="text-center">
+          <Sparkles className="w-8 h-8 text-primary gentle-pulse mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading your wellness plan...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-soft via-background to-accent-soft">
@@ -481,7 +539,23 @@ const DailyView = () => {
           </div>
 
           <div className="space-y-3">
-            {schedule.map((item, index) => (
+            {schedule.length === 0 ? (
+              <Card className="p-8 text-center bg-muted/30">
+                <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">No activities scheduled</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Start your wellness journey by adding your first activity
+                </p>
+                <Button 
+                  onClick={() => setIsAddDialogOpen(true)}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add First Activity
+                </Button>
+              </Card>
+            ) : (
+              schedule.map((item, index) => (
               <Card 
                 key={index} 
                 className={`p-4 transition-all duration-300 ${
@@ -585,10 +659,11 @@ const DailyView = () => {
                         )}
                       </div>
                     )}
-                </div>
-              </Card>
-            ))}
-          </div>
+                 </div>
+               </Card>
+              ))
+            )}
+           </div>
         </div>
 
         {/* Quick Stats */}
