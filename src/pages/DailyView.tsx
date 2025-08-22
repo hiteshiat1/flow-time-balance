@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { wellnessActivities, WellnessActivity } from "@/data/wellnessActivities";
 
 const addActivitySchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -140,6 +141,10 @@ const DailyView = () => {
   }, [user, currentDateTime.toDateString()]);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [addMode, setAddMode] = useState<'library' | 'custom'>('library');
+  const [selectedLibraryActivity, setSelectedLibraryActivity] = useState<WellnessActivity | null>(null);
+  const [libraryActivityTime, setLibraryActivityTime] = useState('');
+  const [libraryActivityDuration, setLibraryActivityDuration] = useState(15);
 
   const form = useForm<AddActivityForm>({
     resolver: zodResolver(addActivitySchema),
@@ -213,6 +218,85 @@ const DailyView = () => {
       console.error('Error adding activity:', error);
       toast({
         title: "Error adding activity",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleLibraryActivitySelect = (activity: WellnessActivity) => {
+    setSelectedLibraryActivity(activity);
+    // Parse duration from string like "5 min" to number
+    const durationMatch = activity.duration.match(/(\d+)/);
+    const duration = durationMatch ? parseInt(durationMatch[1]) : 15;
+    setLibraryActivityDuration(duration);
+  };
+
+  const handleAddLibraryActivity = async () => {
+    if (!user || !selectedLibraryActivity || !libraryActivityTime) return;
+
+    try {
+      const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      
+      const { data: newActivity, error } = await supabase
+        .from('user_activities')
+        .insert({
+          user_id: user.id,
+          title: selectedLibraryActivity.title,
+          type: selectedLibraryActivity.category,
+          scheduled_time: libraryActivityTime,
+          duration_minutes: libraryActivityDuration,
+          description: selectedLibraryActivity.description,
+          scheduled_date: today
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      const activity: Activity = {
+        id: newActivity.id,
+        time: newActivity.scheduled_time,
+        title: newActivity.title,
+        type: newActivity.type,
+        duration: `${newActivity.duration_minutes} min`,
+        durationInSeconds: newActivity.duration_minutes * 60,
+        description: newActivity.description || '',
+        completed: false,
+        current: false,
+        inProgress: false
+      };
+
+      setSchedule(prev => {
+        const updated = [...prev, activity];
+        // Sort by time
+        return updated.sort((a, b) => {
+          try {
+            const today = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+            const timeA = parse(`${today} ${a.time}`, 'yyyy-MM-dd h:mm a', new Date());
+            const timeB = parse(`${today} ${b.time}`, 'yyyy-MM-dd h:mm a', new Date());
+            return timeA.getTime() - timeB.getTime();
+          } catch {
+            return 0;
+          }
+        });
+      });
+
+      // Reset form
+      setSelectedLibraryActivity(null);
+      setLibraryActivityTime('');
+      setLibraryActivityDuration(15);
+      setIsAddDialogOpen(false);
+      
+      toast({
+        title: "Activity Scheduled!",
+        description: `${selectedLibraryActivity.title} scheduled for ${libraryActivityTime}`,
+      });
+    } catch (error: any) {
+      console.error('Error adding library activity:', error);
+      toast({
+        title: "Error scheduling activity",
         description: "Please try again",
         variant: "destructive",
       });
@@ -424,116 +508,220 @@ const DailyView = () => {
                   Add
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add New Activity</DialogTitle>
+                  <DialogTitle>Add Activity</DialogTitle>
                 </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(handleAddActivity)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Activity Title</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. Morning Meditation" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                
+                <div className="space-y-4">
+                  {/* Tab Selection */}
+                  <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                    <Button
+                      type="button"
+                      variant={addMode === 'library' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setAddMode('library')}
+                      className="flex-1"
+                    >
+                      From Library
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={addMode === 'custom' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setAddMode('custom')}
+                      className="flex-1"
+                    >
+                      Custom Activity
+                    </Button>
+                  </div>
+
+                  {addMode === 'library' ? (
+                    /* Library Activities */
+                    <div className="space-y-3">
+                      <div className="max-h-60 overflow-y-auto space-y-2">
+                        {wellnessActivities.map((activity, index) => (
+                          <Card 
+                            key={index}
+                            className={`p-3 cursor-pointer transition-all border ${
+                              selectedLibraryActivity?.title === activity.title 
+                                ? 'ring-2 ring-primary bg-primary-soft' 
+                                : 'hover:shadow-md'
+                            }`}
+                            onClick={() => handleLibraryActivitySelect(activity)}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-medium text-sm">{activity.title}</h4>
+                                  <Badge variant="outline" className={`text-xs ${getActivityTypeClass(activity.category)}`}>
+                                    {activity.category}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-1">{activity.description}</p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{activity.duration}</span>
+                                  <span>•</span>
+                                  <span>{activity.difficulty}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                      
+                      {selectedLibraryActivity && (
+                        <div className="space-y-3 pt-3 border-t">
+                          <h4 className="font-medium">Schedule "{selectedLibraryActivity.title}"</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm font-medium">Time</label>
+                              <Input 
+                                placeholder="e.g. 9:30 AM" 
+                                value={libraryActivityTime}
+                                onChange={(e) => setLibraryActivityTime(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Duration (min)</label>
+                              <Input 
+                                type="number" 
+                                value={libraryActivityDuration}
+                                onChange={(e) => setLibraryActivityDuration(parseInt(e.target.value) || 0)}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={() => setIsAddDialogOpen(false)}
+                              className="flex-1"
+                            >
+                              Cancel
+                            </Button>
+                            <Button 
+                              onClick={handleAddLibraryActivity}
+                              className="flex-1"
+                              disabled={!libraryActivityTime}
+                            >
+                              Schedule Activity
+                            </Button>
+                          </div>
+                        </div>
                       )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Activity Type</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select activity type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="focus">Focus</SelectItem>
-                              <SelectItem value="energy">Energy</SelectItem>
-                              <SelectItem value="calm">Calm</SelectItem>
-                              <SelectItem value="rest">Rest</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="time"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Scheduled Time</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. 9:30 AM" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="duration"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Duration (minutes)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="15" 
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description (optional)</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Brief description of the activity..." 
-                              className="resize-none"
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="flex gap-2 pt-4">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => setIsAddDialogOpen(false)}
-                        className="flex-1"
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="flex-1">
-                        Add Activity
-                      </Button>
                     </div>
-                  </form>
-                </Form>
+                  ) : (
+                    /* Custom Activity Form */
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(handleAddActivity)} className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="title"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Activity Title</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g. Morning Meditation" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Activity Type</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select activity type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="focus">Focus</SelectItem>
+                                  <SelectItem value="energy">Energy</SelectItem>
+                                  <SelectItem value="calm">Calm</SelectItem>
+                                  <SelectItem value="rest">Rest</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="time"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Scheduled Time</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g. 9:30 AM" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="duration"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Duration (minutes)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  placeholder="15" 
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Description (optional)</FormLabel>
+                              <FormControl>
+                                <Textarea 
+                                  placeholder="Brief description of the activity..." 
+                                  className="resize-none"
+                                  {...field} 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <div className="flex gap-2 pt-4">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => setIsAddDialogOpen(false)}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" className="flex-1">
+                            Add Activity
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  )}
+                </div>
               </DialogContent>
             </Dialog>
           </div>
