@@ -77,11 +77,73 @@ const DailyView = () => {
   const currentDate = formatInTimeZone(currentDateTime, userTimezone, 'EEEE, MMMM d, yyyy');
 
   const [schedule, setSchedule] = useState<Activity[]>([]);
+  const [dailyStreak, setDailyStreak] = useState(0);
 
   const [activeTimer, setActiveTimer] = useState<{
     activityId: string;
     remainingSeconds: number;
   } | null>(null);
+
+  // Calculate daily streak
+  const calculateDailyStreak = async () => {
+    if (!user) {
+      setDailyStreak(0);
+      return;
+    }
+
+    try {
+      // Get activities for the last 30 days to calculate streak
+      const endDate = formatInTimeZone(currentDateTime, userTimezone, 'yyyy-MM-dd');
+      const startDate = new Date(currentDateTime);
+      startDate.setDate(startDate.getDate() - 30);
+      const startDateStr = formatInTimeZone(startDate, userTimezone, 'yyyy-MM-dd');
+
+      const { data, error } = await supabase
+        .from('user_activities')
+        .select('scheduled_date, completed')
+        .eq('user_id', user.id)
+        .gte('scheduled_date', startDateStr)
+        .lte('scheduled_date', endDate);
+
+      if (error) throw error;
+
+      // Group activities by date and check if user completed at least one activity each day
+      const activitiesByDate = (data || []).reduce((acc, activity) => {
+        if (!acc[activity.scheduled_date]) {
+          acc[activity.scheduled_date] = [];
+        }
+        acc[activity.scheduled_date].push(activity);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      let streak = 0;
+      let currentDate = new Date(currentDateTime);
+      
+      // Check backwards from today
+      for (let i = 0; i < 30; i++) {
+        const dateStr = formatInTimeZone(currentDate, userTimezone, 'yyyy-MM-dd');
+        const dayActivities = activitiesByDate[dateStr] || [];
+        const hasCompletedActivity = dayActivities.some(activity => activity.completed);
+        
+        if (hasCompletedActivity) {
+          streak++;
+        } else {
+          // If we haven't completed activities for 3 consecutive days, reset streak
+          if (i < 3) {
+            streak = 0;
+          }
+          break;
+        }
+        
+        currentDate.setDate(currentDate.getDate() - 1);
+      }
+
+      setDailyStreak(streak);
+    } catch (error: any) {
+      console.error('Error calculating streak:', error);
+      setDailyStreak(0);
+    }
+  };
 
   // Load user's activities from database
   const fetchActivities = async () => {
@@ -133,10 +195,11 @@ const DailyView = () => {
     }
   };
 
-  // Load activities when user or date changes
+  // Load activities and calculate streak when user or date changes
   useEffect(() => {
     if (user) {
       fetchActivities();
+      calculateDailyStreak();
     }
   }, [user, currentDateTime.toDateString()]);
 
@@ -363,6 +426,9 @@ const DailyView = () => {
         title: "Activity Completed! 🎉",
         description: `Great job on completing ${activity?.title}`,
       });
+
+      // Recalculate streak after activity completion
+      calculateDailyStreak();
     } catch (error: any) {
       console.error('Error completing activity:', error);
       toast({
@@ -866,7 +932,7 @@ const DailyView = () => {
               <p className="text-xs text-muted-foreground">Remaining</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-wellness-energy">5</p>
+              <p className="text-2xl font-bold text-wellness-energy">{dailyStreak}</p>
               <p className="text-xs text-muted-foreground">Day Streak</p>
             </div>
           </div>
