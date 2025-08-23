@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { TimePicker } from "@/components/ui/time-picker";
 import { Navigation } from "@/components/Navigation";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -643,10 +644,10 @@ const DailyView = () => {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-sm font-medium">Time</label>
-                              <Input 
-                                placeholder="e.g. 9:30 AM" 
+                              <TimePicker 
                                 value={libraryActivityTime}
-                                onChange={(e) => setLibraryActivityTime(e.target.value)}
+                                onChange={setLibraryActivityTime}
+                                placeholder="Select time"
                               />
                             </div>
                             <div>
@@ -727,7 +728,11 @@ const DailyView = () => {
                             <FormItem>
                               <FormLabel>Scheduled Time</FormLabel>
                               <FormControl>
-                                <Input placeholder="e.g. 9:30 AM" {...field} />
+                                <TimePicker 
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="Select time"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
