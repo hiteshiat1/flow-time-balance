@@ -132,7 +132,7 @@ const Landing = () => {
       {/* Footer */}
       <footer className="py-8 px-4 border-t">
         <div className="max-w-4xl mx-auto text-center text-muted-foreground">
-          <p>&copy; 2025 MeTime. Your wellness, your journey.</p>
+          <p>&copy; 2024 MeTime. Your wellness, your journey.</p>
         </div>
       </footer>
     </div>
