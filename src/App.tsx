@@ -23,10 +23,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
-        <Toaster />
-        <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <Toaster />
+            <Sonner />
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
