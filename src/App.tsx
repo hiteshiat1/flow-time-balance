@@ -4,6 +4,8 @@ import React, { Suspense, lazy } from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Debug React hooks availability
@@ -15,6 +17,10 @@ console.log('React hooks available:', {
 
 // Lazy load components to identify which one causes the issue
 const Landing = lazy(() => import("./pages/Landing"));
+const DailyView = lazy(() => import("./pages/DailyView"));
+const WellnessLibrary = lazy(() => import("./pages/WellnessLibrary"));
+const Progress = lazy(() => import("./pages/Progress"));
+const Settings = lazy(() => import("./pages/Settings"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -41,18 +47,40 @@ function App() {
   return (
     <ErrorBoundary fallback={<div>Something went wrong. Please refresh the page.</div>}>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/health-disclaimer" element={<HealthDisclaimer />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/health-disclaimer" element={<HealthDisclaimer />} />
+                <Route path="/daily" element={
+                  <ProtectedRoute>
+                    <DailyView />
+                  </ProtectedRoute>
+                } />
+                <Route path="/library" element={
+                  <ProtectedRoute>
+                    <WellnessLibrary />
+                  </ProtectedRoute>
+                } />
+                <Route path="/progress" element={
+                  <ProtectedRoute>
+                    <Progress />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                } />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AuthProvider>
         <Toaster />
         <Sonner />
       </QueryClientProvider>
