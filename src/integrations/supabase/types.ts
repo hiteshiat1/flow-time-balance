@@ -19,7 +19,9 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          last_activity_date: string | null
           notification_preferences: Json | null
+          streak_count: number | null
           updated_at: string
           user_id: string
           wellness_preferences: Json | null
@@ -28,7 +30,9 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          last_activity_date?: string | null
           notification_preferences?: Json | null
+          streak_count?: number | null
           updated_at?: string
           user_id: string
           wellness_preferences?: Json | null
@@ -37,7 +41,9 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          last_activity_date?: string | null
           notification_preferences?: Json | null
+          streak_count?: number | null
           updated_at?: string
           user_id?: string
           wellness_preferences?: Json | null
@@ -94,7 +100,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_user_streak: {
+        Args: { user_id_param: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
