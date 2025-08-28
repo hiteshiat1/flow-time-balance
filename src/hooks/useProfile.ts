@@ -20,6 +20,8 @@ interface Profile {
     sound_effects?: boolean;
     push_notifications?: boolean;
   };
+  streak_count: number;
+  last_activity_date: string | null;
   created_at: string;
   updated_at: string;
 }

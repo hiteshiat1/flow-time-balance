@@ -3,8 +3,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress as ProgressBar } from "@/components/ui/progress";
 import { Navigation } from "@/components/Navigation";
+import { useProfile } from "@/hooks/useProfile";
 
 const Progress = () => {
+  const { profile, loading } = useProfile();
   const weeklyProgress = [
     { day: "Mon", completed: 6, total: 6 },
     { day: "Tue", completed: 5, total: 6 },
@@ -70,10 +72,16 @@ const Progress = () => {
         <Card className="p-6 mb-6 bg-gradient-to-r from-primary-soft to-accent-soft text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Flame className="w-6 h-6 text-accent breathing-animation" />
-            <span className="text-3xl font-bold text-primary">14</span>
+            <span className="text-3xl font-bold text-primary">
+              {loading ? "..." : (profile?.streak_count || 0)}
+            </span>
           </div>
           <p className="text-sm text-muted-foreground">Day Streak</p>
-          <p className="text-xs text-muted-foreground mt-1">Keep going! You're on fire 🔥</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {!loading && (profile?.streak_count || 0) === 0 
+              ? "Complete your first activity to start your streak!" 
+              : "Keep going! You're on fire 🔥"}
+          </p>
         </Card>
 
         {/* Weekly Overview */}

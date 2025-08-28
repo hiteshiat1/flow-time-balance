@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TimePicker } from "@/components/ui/time-picker";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Navigation } from "@/components/Navigation";
 import { useState, useEffect } from "react";
@@ -255,6 +256,15 @@ const DailyView = () => {
 
       if (error) throw error;
 
+      // Update user streak
+      const { error: streakError } = await supabase.rpc('update_user_streak', {
+        user_id_param: user.id
+      });
+      
+      if (streakError) {
+        console.error('Error updating streak:', streakError);
+      }
+
       // Update local state
       setSchedule(prev => {
         const updated = prev.map(item => {
@@ -475,7 +485,10 @@ const DailyView = () => {
                         <FormItem>
                           <FormLabel>Scheduled Time</FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g. 9:30 AM" {...field} />
+                            <TimePicker 
+                              value={field.value} 
+                              onChange={field.onChange}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
